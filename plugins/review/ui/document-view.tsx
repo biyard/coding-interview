@@ -3,6 +3,7 @@ import type { PluginProps } from "@interview/plugin-sdk/react";
 import { LoadingNotice, QueryError } from "./common";
 import { useDocument } from "./hooks";
 import { Modal } from "./modal";
+import { FileText } from "lucide-react";
 import { Badge } from "@biyard/components";
 import { getText } from "./text";
 
@@ -27,7 +28,24 @@ export function DocumentPreview({
   return (
     <Modal
       labelId="preview-title"
-      title={text.previewTitle(doc?.title ?? label)}
+      fixedBody
+      header={
+        <div className="space-y-1">
+          <div className="flex items-start gap-2">
+            <FileText aria-hidden="true" className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
+            <h2 id="preview-title" className="min-w-0 break-words text-heading-5 font-semibold">
+              {text.previewTitle(doc?.title ?? label)}
+            </h2>
+          </div>
+          {doc ? (
+            <p className="break-all text-caption text-muted-foreground">
+              <span className="sr-only">{text.fileName}: </span>
+              <span>{doc.fileName}</span> · <span className="sr-only">{text.createdAt}: </span>
+              <time dateTime={doc.createdAt}>{created}</time>
+            </p>
+          ) : null}
+        </div>
+      }
       closeLabel={text.close}
       onClose={onClose}
     >
@@ -40,35 +58,20 @@ export function DocumentPreview({
         />
       ) : null}
       {doc ? (
-        <article className="space-y-4">
-          <p className="text-lg font-semibold break-words">{doc.title}</p>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
-            <dt className="text-caption text-muted-foreground">{text.fileName}</dt>
-            <dd className="break-all">{doc.fileName}</dd>
-            <dt className="text-caption text-muted-foreground">{text.status}</dt>
-            <dd>
-              <Badge
-                variant={
-                  doc.status === "ready"
-                    ? "success"
-                    : doc.status === "failed"
-                      ? "danger"
-                      : "warning"
-                }
-              >
-                {text.docStatus[doc.status]}
-              </Badge>
-            </dd>
-            <dt className="text-caption text-muted-foreground">{text.createdAt}</dt>
-            <dd>
-              <time dateTime={doc.createdAt}>{created}</time>
-            </dd>
-          </dl>
-          <div className="space-y-1">
-            <h3 className="text-body-sm font-semibold">{text.content}</h3>
-            <p className="whitespace-pre-wrap break-words rounded-md border border-border bg-card p-4">
-              {doc.content}
-            </p>
+        <article className="flex min-h-0 flex-1 flex-col gap-4">
+          <div>
+            <span className="sr-only">{text.status}: </span>
+            <Badge
+              variant={
+                doc.status === "ready" ? "success" : doc.status === "failed" ? "danger" : "warning"
+              }
+            >
+              {text.docStatus[doc.status]}
+            </Badge>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-muted p-4">
+            <h3 className="sr-only">{text.content}</h3>
+            <p className="whitespace-pre-wrap break-words">{doc.content}</p>
           </div>
         </article>
       ) : null}

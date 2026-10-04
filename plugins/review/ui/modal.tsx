@@ -9,13 +9,19 @@ import { Button, cn } from "@biyard/components";
 export function Modal({
   labelId,
   title,
+  header,
+  fixedBody = false,
   closeLabel,
   onClose,
   className,
   children,
 }: {
   labelId: string;
-  title: ReactNode;
+  title?: ReactNode;
+  /** 주어지면 기본 h2 제목 대신 이 헤더를 그린다(h2에 labelId를 직접 달아야 한다). */
+  header?: ReactNode;
+  /** true면 dialog는 스크롤하지 않고 본문 영역(min-h-0 flex-1)만 스크롤하도록 맞춘다. */
+  fixedBody?: boolean;
   closeLabel: string;
   onClose: () => void;
   className?: string;
@@ -40,7 +46,10 @@ export function Modal({
       ref={dialog}
       aria-labelledby={labelId}
       className={cn(
-        "m-auto max-h-[90vh] w-[min(40rem,calc(100vw-1rem))] overflow-y-auto rounded-lg border border-border bg-card p-0 text-foreground backdrop:bg-black/50",
+        "m-auto max-h-[90vh] border border-border bg-card p-0 text-foreground backdrop:bg-black/50",
+        fixedBody
+          ? "flex w-[min(42rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl"
+          : "w-[min(40rem,calc(100vw-1rem))] overflow-y-auto rounded-lg",
         className,
       )}
       onCancel={(event) => {
@@ -55,11 +64,19 @@ export function Modal({
         pressedOnBackdrop.current = false;
       }}
     >
-      <div className="space-y-4 p-4 sm:p-6">
+      <div
+        className={
+          fixedBody ? "flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6" : "space-y-4 p-4 sm:p-6"
+        }
+      >
         <div className="flex items-start justify-between gap-3">
-          <h2 id={labelId} className="min-w-0 break-words text-heading-5 font-semibold">
-            {title}
-          </h2>
+          {header ? (
+            <div className="min-w-0 flex-1">{header}</div>
+          ) : (
+            <h2 id={labelId} className="min-w-0 break-words text-heading-5 font-semibold">
+              {title}
+            </h2>
+          )}
           <Button
             type="button"
             variant="ghost"
