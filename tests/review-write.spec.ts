@@ -315,26 +315,27 @@ test.describe("검토 작성 — 투자자가 기준별 검토를 근거 자료�
       await expect(preview).toBeVisible();
       await expect(page).toHaveURL(new RegExp(`${PLUGIN}/criteria/${REVENUE.id}$`));
       await expect(formDialog).toBeVisible();
-      const article = preview.getByRole("article");
-      await expect(article.locator("p").first()).toHaveText(doc.docTitle);
+      await expect(preview.getByRole("heading", { level: 2 })).toHaveText(
+        `${doc.docTitle} 미리보기`,
+      );
+      await expect(preview.getByRole("article")).toBeVisible();
       await expect(preview.getByText(doc.fileName, { exact: true })).toBeVisible();
       await expect(preview.getByText("준비 완료", { exact: true })).toBeVisible();
-      await expect(preview.getByText("작성일", { exact: true })).toBeVisible();
-      await expect(preview.locator("time")).toHaveAttribute(
-        "datetime",
-        new RegExp(`^${doc.createdDate}`),
-      );
+      // 작성 시각은 보이는 텍스트로 확인한다(시간대·포맷에 의존하지 않고 숫자 포함 여부만 본다).
+      const created = preview.locator("time");
+      await expect(created).toBeVisible();
+      await expect(created).toHaveText(/\d/);
+      await expect(created).not.toHaveText(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+      await expect(created).toHaveAttribute("datetime", new RegExp(`^${doc.createdDate}`));
       await expect(preview.getByText(doc.content)).toBeVisible();
       await expect(preview.getByRole("textbox")).toHaveCount(0);
 
-      // 비목표: 다운로드·파일 크기·분류 태그는 없고 메타 항목은 파일명·상태·작성일뿐이다.
+      // 비목표: 다운로드·파일 크기·분류 태그는 없고 메타 항목은 파일명·작성 시각·상태뿐이다.
       await expect(preview.getByRole("button", { name: /다운로드/ })).toHaveCount(0);
       await expect(preview.getByRole("link", { name: /다운로드/ })).toHaveCount(0);
       await expect(preview.getByText("다운로드")).toHaveCount(0);
-      const meta = preview.locator("dl");
-      await expect(meta.locator("dt")).toHaveText(["파일명", "상태", "작성일"]);
-      await expect(meta.locator("dd")).toHaveCount(3);
-      await expect(meta).not.toContainText(/\d\s?(B|KB|MB|GB|KiB|MiB)\b/i);
+      await expect(preview.locator("dl")).toHaveCount(0);
+      await expect(created.locator("..")).not.toContainText(/\d\s?(B|KB|MB|GB|KiB|MiB)\b/i);
       await expect(preview.getByRole("list")).toHaveCount(0);
     });
 

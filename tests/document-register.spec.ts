@@ -80,14 +80,16 @@ test.describe("자료 등록 — 기업 담당자가 제목과 파일로 자료�
       await submitButton(page).click();
 
       await expect(page).toHaveURL(DETAIL);
-      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-      const article = page.getByRole("article");
-      await expect(article).toContainText(fileName);
-      await expect(article).toContainText("사용 가능");
-      await expect(article).toContainText("# 등록 본문");
-      await expect(article).toContainText("둘째 줄 내용");
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("heading", { name: title })).toBeVisible();
+      await expect(dialog).toContainText(fileName);
+      await expect(dialog).toContainText("사용 가능");
+      await expect(dialog).toContainText("# 등록 본문");
+      await expect(dialog).toContainText("둘째 줄 내용");
 
-      await page.getByRole("link", { name: "자료 목록으로" }).click();
+      await dialog.getByRole("button", { name: "닫기" }).click();
+      await expect(dialog).toBeHidden();
       await expect(page).toHaveURL(new RegExp(`${LIST}$`));
       const first = page.getByRole("listitem").first();
       await expect(first).toContainText(title);
@@ -330,8 +332,8 @@ test.describe("자료 등록 — 기업 담당자가 제목과 파일로 자료�
       current = null;
       await submitButton(page).click();
       await expect(page).toHaveURL(DETAIL);
-      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-      await expect(page.getByRole("article")).toContainText(fileName);
+      await expect(page.getByRole("dialog").getByRole("heading", { name: title })).toBeVisible();
+      await expect(page.getByRole("dialog")).toContainText(fileName);
     });
 
     /**

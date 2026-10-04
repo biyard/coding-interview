@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Outlet, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Input } from "@biyard/components";
 import { useDocuments } from "../api/hooks/use-documents";
 import { useI18n } from "../i18n";
@@ -62,7 +62,7 @@ export function DocumentList({
           {items.map((doc) => (
             <li key={doc.id}>
               <Link
-                to={`${base}/${encodeURIComponent(doc.id)}`}
+                to={`${base}/${encodeURIComponent(doc.id)}${urlQuery ? `?q=${encodeURIComponent(urlQuery)}` : ""}`}
                 className="flex min-h-11 flex-col gap-2 rounded-lg border border-border bg-card p-4 hover:bg-accent md:flex-row md:items-center md:justify-between"
               >
                 <span className="min-w-0 break-words">
@@ -82,6 +82,7 @@ export function DocumentList({
           ))}
         </ul>
       )}
+      <Outlet />
     </section>
   );
 }

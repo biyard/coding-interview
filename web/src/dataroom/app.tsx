@@ -16,21 +16,29 @@ export function DataroomApp() {
     enabled: false,
   });
   const userId = session.data?.user.id;
+  const workspaceName = session.data?.workspace.name ?? "";
   const role = session.data?.user.role;
   if (!userId) return <p role="status">{t.loading}</p>;
   return (
     <Routes>
       <Route
-        index
+        path="/"
         element={<DocumentList userId={userId} workspaceId={workspaceId} role={role} />}
-      />
+      >
+        <Route
+          path="documents/:documentId"
+          element={
+            <DocumentDetail
+              userId={userId}
+              workspaceId={workspaceId}
+              workspaceName={workspaceName}
+            />
+          }
+        />
+      </Route>
       <Route
         path="documents/new"
         element={<DocumentRegister userId={userId} workspaceId={workspaceId} role={role} />}
-      />
-      <Route
-        path="documents/:documentId"
-        element={<DocumentDetail userId={userId} workspaceId={workspaceId} />}
       />
     </Routes>
   );
