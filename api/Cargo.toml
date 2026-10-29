@@ -23,3 +23,6 @@ tower-cookies = { version = "0.11", features = ["signed"] }
 ts-rs = { version = "10", features = ["serde-compat", "no-serde-warnings"] }
 ts-server-fn = "=0.2.0"
 ts-server-fn-axum = "=0.1.0"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

@@ -15,12 +15,17 @@ export function Shell({ session }: { session: HostSession }) {
   const { t, locale, setLocale } = useI18n();
   const { workspaceId, pluginId, "*": rest = "" } = useParams();
   const { user, workspace } = session;
-  const logout = useMutation({ mutationFn: () => authAdapter.logout(), onSuccess: expireSession });
+  const logout = useMutation({
+    mutationFn: () => authAdapter.logout(),
+    onSuccess: expireSession,
+  });
   const catalog = usePlugins();
   const pluginCatalog = catalog.data ?? [];
   const plugin = pluginCatalog.find((item) => item.id === pluginId);
   if (!workspaceId)
-    return <Navigate to={`/workspace/${encodeURIComponent(workspace.id)}`} replace />;
+    return (
+      <Navigate to={`/workspace/${encodeURIComponent(workspace.id)}`} replace />
+    );
   return (
     <div className="min-h-screen md:grid md:grid-cols-[232px_1fr]">
       <aside className="flex flex-col gap-6 border-b border-border bg-card p-6 md:border-r md:border-b-0">
@@ -49,7 +54,9 @@ export function Shell({ session }: { session: HostSession }) {
               {item.name}
             </NavLink>
           ))}
-          {catalog.isError ? <ConnectionError retry={() => catalog.refetch()} /> : null}
+          {catalog.isError ? (
+            <ConnectionError retry={() => catalog.refetch()} />
+          ) : null}
         </nav>
       </aside>
       <div className="min-w-0">
@@ -72,7 +79,11 @@ export function Shell({ session }: { session: HostSession }) {
                 <option value="en">English</option>
               </select>
             </label>
-            <Button variant="outline" onClick={() => logout.mutate()} disabled={logout.isPending}>
+            <Button
+              variant="outline"
+              onClick={() => logout.mutate()}
+              disabled={logout.isPending}
+            >
               {t.logout}
             </Button>
           </div>
@@ -82,7 +93,7 @@ export function Shell({ session }: { session: HostSession }) {
           {workspaceId !== workspace.id ? (
             <p role="alert">{t.noWorkspace}</p>
           ) : !pluginId ? (
-            <DataroomApp />
+            <DataroomApp session={session} />
           ) : catalog.isPending ? (
             <p role="status">{t.loading}</p>
           ) : catalog.isError ? (
@@ -93,7 +104,12 @@ export function Shell({ session }: { session: HostSession }) {
             <RuntimePlugin
               key={`${user.id}:${workspace.id}:${plugin.id}`}
               plugin={plugin}
-              context={{ user, workspaceId: workspace.id, locale, location: `/${rest}` }}
+              context={{
+                user,
+                workspaceId: workspace.id,
+                locale,
+                location: `/${rest}`,
+              }}
             />
           )}
         </main>

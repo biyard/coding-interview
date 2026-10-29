@@ -141,3 +141,239 @@ Playwright 설정과 빈 `tests/` 폴더가 포함되어 있습니다. 테스트
 | Plugin·Gen-TS 이해와 확장 |  35% | 제공된 코드 이해, API에서 생성 TS·React Query·화면까지의 연결, 본체와 Plugin의 책임·호출 경계 |
 | API·DB 모델 설계          |  35% | 제품 규칙에 맞는 계약·권한·모델·제약·저장 일관성                                              |
 | UI 작성과 사용자 흐름     |  30% | 직접 구현한 업무 화면, 등록→검토→현황 흐름, 상태·오류 처리·사용성                             |
+
+---
+
+## 제출 결과
+
+### 과제 이해와 구현 범위
+
+이 구현은 workspace를 데이터룸의 접근 경계로 삼고, 회사가 공유한 자료를 투자자가 개인 검토의 근거로 연결하는 흐름을 완성합니다. 호스트 애플리케이션의 **DataRoom**은 자료 등록·목록·검색·상세를 담당하고, **Review Plugin**은 검토 기준·개인 검토·근거·진행 현황을 담당합니다. 로그인·세션, Plugin 로더와 수명주기, manifest, Plugin SDK의 호출 경계는 제공된 구조를 유지했습니다.
+
+구현한 필수 범위는 다음과 같습니다.
+
+- 회사와 투자자의 자료 목록·제목 검색·상태·상세 조회
+- 회사 전용 UTF-8 `.txt`·`.md` 자료 등록
+- 회사와 투자자의 검토 기준 조회
+- 투자자별 검토 작성·수정, `ready` 자료 근거 연결, 개인 진행 현황
+- workspace·역할·검토 작성자 기준의 서버 권한 검사
+- PostgreSQL 영속화, 검토와 근거의 원자적 저장, 동시 저장 충돌 처리
+- URL 직접 접근·새로고침·뒤로 가기, 로딩·오류·빈 결과·재시도 UI
+- 실제 API·PostgreSQL을 사용하는 백엔드 통합 테스트와 Playwright E2E
+
+선택 기능인 AI 검토 초안 생성은 구현하지 않았습니다. 회원가입, workspace 생성·삭제, 자료 삭제, 비동기 파일 처리 등 원문의 제외 범위도 구현하지 않았습니다.
+
+### 실행, 계정과 데이터베이스
+
+Docker Compose v2와 `make`가 준비된 환경에서 다음과 같이 실행합니다.
+
+```sh
+make dev
+```
+
+브라우저에서 <http://localhost:5178/>에 접속합니다. 기본 계정과 비밀번호는 과제 원문에 기재된 다음 값을 사용합니다.
+
+| 역할 | 이메일 | 비밀번호 |
+| --- | --- | --- |
+| 회사 | `company@lighthouse.test` | `dataroom` |
+| 투자자 | `investor@lighthouse.test` | `dataroom` |
+| 동료 투자자 | `peer@lighthouse.test` | `dataroom` |
+
+API 시작 시 `api/migrations/`의 SQLx 마이그레이션이 순서대로 적용됩니다.
+
+- `0001_review_criteria.sql`: 고정 검토 기준 3개
+- `0002_auth.sql`: `lighthouse` workspace, 세 계정, 역할과 세션
+- `0003_dataroom.sql`: 자료·검토·근거 테이블과 샘플 자료 4개
+- `0004_review_revision.sql`: 낙관적 동시성 제어용 `revision`
+
+`make stop`은 컨테이너를 중지하되 DB 볼륨을 보존합니다. `make reset-db`는 기본 DB 볼륨을 삭제하므로 데이터를 완전히 초기화해야 하는 로컬 개발 상황에서만 사용해야 합니다. 제출 검증에서는 기존 DB나 테스트 볼륨에 이 명령을 사용하지 않았습니다.
+
+### lighthouse 환경과 E2E 환경
+
+기본 `dataroom-interview` Compose 프로젝트의 `lighthouse` workspace는 과제 기능을 직접 확인하는 환경입니다. `api/migrations/0002_auth.sql`과 `0003_dataroom.sql`의 세 계정, 기준 3개, 샘플 자료 4개를 사용합니다.
+
+쓰기 E2E는 기본 환경과 분리한 `dataroom-e2e-it` Compose 프로젝트와 `dataroom-e2e-it_platform-pg-data` 볼륨에서 실행했습니다. `tests/e2e-fixture.sql`은 그 DB 안에서도 별도 `e2e` workspace와 전용 회사·투자자·동료 투자자를 준비합니다. 백엔드 통합 테스트는 별도 `dataroom-backend-it` 프로젝트와 `dataroom-backend-it_platform-pg-data` 볼륨을 사용하고, 실행마다 고유한 workspace와 사용자를 생성합니다. 두 테스트 환경은 기본 `dataroom-interview` DB와 포트·Compose 프로젝트·볼륨이 다릅니다.
+
+### 책임과 연결 구조
+
+DataRoom과 Review Plugin은 다음 경계를 유지합니다.
+
+- `api/src/dataroom/`: 자료 RPC, 자료 검증과 workspace·회사 역할 검사
+- `web/src/dataroom/`: 호스트의 자료 목록·등록·상세 UI
+- `plugins/review/server/`: 검토 기준·개인 검토 RPC와 저장 트랜잭션
+- `plugins/review/ui/`: Plugin 내부의 기준·진행 현황·검토 편집·근거 UI
+
+업무 계약은 다음 경로로 연결됩니다.
+
+1. `api/src/dataroom/types.rs`와 `plugins/review/server/types.rs`의 Serde/`ts-rs` DTO가 JSON 필드와 타입의 원본입니다.
+2. `scripts/gen-ts.sh`와 `scripts/finish-gen-ts.mjs`가 `api-client/src/types/`에 TypeScript 타입을 생성합니다.
+3. 호스트는 `api-client`의 DataRoom RPC handler를 사용하고, Plugin은 `plugin-sdk/index.ts`의 `PluginHost.call`을 사용합니다.
+4. `plugins/review/ui/api.ts`는 Review RPC와 `{ target: "dataroom" }` 자료 RPC를 typed 함수로 감쌉니다.
+5. `web/src/dataroom/`과 `plugins/review/ui/`는 React Query로 조회·저장 상태와 캐시 무효화를 관리하고 UI를 렌더링합니다.
+
+Plugin은 임의의 HTTP 경로나 별도 전역 상태를 만들지 않았습니다. 자료 근거 조회도 Plugin SDK의 `host.call`을 통해 호스트 DataRoom RPC 경계를 사용합니다. Query key는 `plugin-sdk/index.ts`의 `scopedKey`로 사용자 ID와 workspace ID를 포함하며, `plugin-sdk/react.tsx`는 Plugin unmount 시 전용 QueryClient를 취소하고 비웁니다.
+
+### 업무 API 계약
+
+모든 업무 호출은 기존 RPC endpoint를 사용하고 `workspaceId`, `method`, `params`를 전달합니다.
+
+| 대상 | method | 주요 입력 | 주요 응답 |
+| --- | --- | --- | --- |
+| DataRoom | `listDocuments` | `search?: string` | `DocumentSummary[]` |
+| DataRoom | `getDocument` | `documentId` | `DocumentDetail` |
+| DataRoom | `createDocument` | `title`, `fileName`, `content` | 생성된 `DocumentDetail` |
+| Review | `listCriteria` | 빈 객체 | `ReviewCriterion[]` |
+| Review | `listReviews` | 빈 객체 | 인증 투자자의 `Review[]` |
+| Review | `saveReview` | 기준·판단·의견·근거 ID·`expectedRevision` | 저장된 `Review` |
+
+`Review.revision`과 `SaveReviewParams.expectedRevision`은 Rust에서 `i64`지만 JavaScript 안전 범위 안의 DB 증가값으로 사용하며 Gen-TS에서는 각각 `number`, `number | null`로 생성합니다. 잘못된 입력은 400, 미인증은 401, 역할·workspace 위반은 403, 없는 자료는 404, revision 충돌은 409로 구분합니다.
+
+### DB 모델, 관계와 인덱스
+
+`api/migrations/0003_dataroom.sql`은 다음 관계를 정의합니다.
+
+- `documents`: workspace의 자료. 상태는 `ready`, `processing`, `failed` 중 하나입니다.
+- `reviews`: workspace·투자자·기준별 하나의 개인 검토입니다.
+- `review_evidence`: 검토와 자료의 다대다 연결입니다.
+
+주요 제약은 다음과 같습니다.
+
+- 자료 제목 1자 이상 200자 이하, 파일명 1자 이상 255자 이하, 본문 최대 204800바이트
+- 파일명은 경로 구분자를 허용하지 않고 `.txt` 또는 `.md` 확장자만 허용
+- 판단은 `satisfied` 또는 `needs_information`, 의견은 공백이 아닌 1자 이상 2000자 이하
+- `(workspace_id, investor_id, criterion_id)` UNIQUE로 중복 검토 방지
+- 복합 FK `(workspace_id, review_id)`와 `(workspace_id, document_id)`로 다른 workspace 자료 연결 방지
+- 근거 PK `(review_id, document_id)`로 중복 연결 방지, 검토 삭제 시 근거 CASCADE
+- 자료 목록 정렬용 `(workspace_id, created_at DESC, id ASC)` 인덱스
+- 대소문자를 무시한 제목 접두 검색용 `(workspace_id, LOWER(title) TEXT_PATTERN_OPS)` 인덱스
+- 검토 조회용 `(workspace_id, investor_id)`, 역방향 근거 조회용 `(workspace_id, document_id)` 인덱스
+
+투자자 역할, `ready` 근거, 최소 한 개 근거 같은 규칙은 여러 행 또는 인증 문맥이 필요하므로 API 트랜잭션에서 추가로 검사합니다.
+
+### 인증, 역할과 데이터 격리
+
+세션 middleware가 서명된 `dr_session` 쿠키를 해석해 `AuthenticatedUser`를 request extension에 넣습니다. 클라이언트가 보낸 사용자 ID나 역할은 신뢰하지 않습니다.
+
+- 모든 DataRoom·Review RPC는 요청 `workspaceId`와 인증 사용자의 workspace를 먼저 비교합니다.
+- 자료 조회 SQL은 항상 인증 사용자의 `workspace_id`를 조건으로 사용합니다.
+- 자료 등록은 company만 허용하고 권한을 입력 검증보다 먼저 검사합니다.
+- 검토 저장은 investor만 허용하며 `investor_id`는 요청이 아니라 인증 사용자 ID를 사용합니다.
+- 회사의 비공개 검토 목록 요청은 200과 빈 목록을 반환하지만 저장은 403입니다.
+- 투자자는 자신의 검토만 조회·수정할 수 있고 다른 투자자의 검토 ID를 직접 지정할 계약이 없습니다.
+
+### 파일과 요청 크기
+
+브라우저는 `TextDecoder("utf-8", { fatal: true })`로 파일을 읽어 잘못된 UTF-8을 거부합니다. UI와 API 모두 제목·파일명·확장자·NUL 문자·본문 204800바이트 제한을 검사하고 DB CHECK가 마지막 방어선 역할을 합니다.
+
+Axum의 전체 요청 제한은 256KiB입니다. 본문이 204800바이트 이하여도 JSON escaping과 `workspaceId`, method, 제목, 파일명 오버헤드에 따라 전체 요청이 커질 수 있으므로 `web/src/dataroom/api.ts`가 실제 직렬화한 요청의 UTF-8 바이트 수를 계산하고 UI가 256KiB 초과 요청을 전송 전에 거부합니다. 서버의 413도 별도 오류로 표시합니다. DB 본문 상한과 HTTP 전체 요청 상한은 서로 다른 제약으로 유지했습니다.
+
+### 검토 저장과 동시성
+
+`saveReview`는 하나의 PostgreSQL 트랜잭션에서 다음 순서로 실행됩니다.
+
+1. `workspace_id:user_id:criterion_id`에서 만든 키로 `pg_advisory_xact_lock`을 획득합니다.
+2. 검토 기준, 중복 없는 근거 ID, 동일 workspace의 `ready` 자료, 최소 한 개 근거를 확인합니다.
+3. 기존 검토는 `expectedRevision`과 현재 revision이 일치할 때만 갱신하고 revision을 1 증가시킵니다.
+4. 기존 근거를 삭제하고 새 근거를 삽입한 뒤 commit합니다.
+
+검증이나 근거 삽입이 실패하면 트랜잭션 전체가 rollback되어 기존 검토와 근거가 보존됩니다. advisory lock은 동일 투자자의 동일 기준에 대한 최초 동시 INSERT도 직렬화하므로 한 요청의 본문과 다른 요청의 근거가 섞이지 않습니다. revision은 서로 다른 브라우저에서 읽은 오래된 편집을 409로 거부합니다. UI는 로컬 입력을 유지한 채 최신 서버 검토를 보여주고, 사용자가 최신 내용 적용 또는 현재 입력 재시도를 선택할 수 있게 합니다.
+
+대안으로 SERIALIZABLE 격리 수준과 전체 요청 재시도, `INSERT ... ON CONFLICT` 후 행 잠금, 검토마다 별도 version token을 고려할 수 있습니다. 현재 방식은 잠금 범위가 동일 사용자·기준으로 좁고 최초 생성과 수정 모두 같은 흐름으로 처리할 수 있어 선택했습니다. 목록의 검토 본문과 근거는 단일 `LEFT JOIN`/`ARRAY_AGG` SQL로 조회해 한 statement snapshot을 사용합니다.
+
+### 명시적으로 선택한 동작
+
+- 제목 검색은 앞뒤 공백을 제거하고 대소문자를 무시하는 **접두 검색**입니다. 인덱스로 지원할 수 있고 현재 과제 데이터에서 예측 가능한 결과를 제공하기 위해 선택했습니다.
+- 자료 목록은 `created_at DESC`, 동률이면 `id ASC`입니다.
+- 정상 등록된 자료는 비동기 처리 없이 즉시 `ready`가 됩니다.
+- 근거 선택 목록에는 동일 workspace의 `ready` 자료만 표시하고 서버에서도 다시 검증합니다.
+- 검토 기준은 회사와 투자자 모두 조회할 수 있지만 회사에는 개인 현황·작성 UI를 제공하지 않습니다.
+- 조회 실패, 빈 목록, 로딩, 저장 실패를 서로 다른 상태로 표시하며 실패 시 폼 state를 초기화하지 않습니다.
+
+### 구현 전 이해와 구현 중 보완
+
+구현 전에는 DataRoom이 자료를, Review Plugin이 검토와 현황을 소유하고, workspace와 인증 사용자 역할을 모든 서버 호출의 경계로 사용한다고 이해했습니다. 또한 제공된 RPC·Plugin loader·Gen-TS 흐름을 확장하고 새 HTTP 경로를 만들지 않는 방향을 공유했습니다. 이 가정은 실제 구현에서도 유지됐습니다.
+
+구현 과정에서 과제 원문과 테스트 결과를 근거로 다음을 구체화했습니다.
+
+- 회사가 비공개 검토 목록을 요청할 때 403이 아니라 200 빈 목록이어야 함을 반영하고, 기준 조회는 회사와 투자자 모두 사용할 수 있도록 별도 `listCriteria` method로 분리했습니다.
+- 이미 적용된 `0003`을 수정하지 않고 revision을 `0004_review_revision.sql`로 추가했습니다.
+- 동일 투자자의 최초 동시 생성은 단순 UNIQUE와 revision만으로 충분하지 않아 transaction advisory lock을 추가했습니다.
+- `listReviews`의 본문과 근거를 별도 쿼리로 읽으면 중간 commit을 섞어 볼 수 있어 단일 집계 SQL로 변경했습니다.
+- 204800바이트 DB 상한만 확인해서는 JSON escaping으로 256KiB 요청을 넘을 수 있어 직렬화된 전체 요청 크기 검사를 UI에 추가했습니다.
+
+### 테스트 전략과 결과
+
+테스트는 기본 `lighthouse` 데이터를 변경하지 않도록 두 개의 격리 Compose 프로젝트를 사용했습니다. 아래 결과는 2026-10-29에 확인했습니다.
+
+#### Rust 단위 테스트
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --locked --manifest-path api/Cargo.toml --lib
+```
+
+결과: 포맷 검사 통과, 단위 테스트 3개 통과. 자료 본문 바이트 경계, 파일명 검증, 검토 의견 검증을 확인합니다.
+
+#### 실제 PostgreSQL 백엔드 통합 테스트
+
+`api/tests/backend_api.rs`는 `INTEGRATION_TEST_ALLOW_WRITES=isolated-compose-volume` guard와 별도 `INTEGRATION_DATABASE_URL` 없이는 쓰기 테스트를 거부합니다.
+
+```sh
+INTEGRATION_TEST_ALLOW_WRITES=isolated-compose-volume \
+INTEGRATION_DATABASE_URL=postgres://dataroom_interview:dataroom_interview@127.0.0.1:5551/dataroom_interview \
+cargo test --locked --manifest-path api/Cargo.toml --test backend_api -- --ignored --nocapture
+```
+
+결과: 통합 테스트 1개 통과. 한 테스트 안에서 실제 인증 세션과 Axum router를 사용해 401·403·404·400·409, workspace 경계, 두 투자자 격리, rollback, 최초 동시 생성, 동시 수정, 근거 불혼합을 검증합니다.
+
+#### TypeScript와 생성 계약
+
+```sh
+make check-gen-ts-docker
+pnpm typecheck
+pnpm build
+```
+
+결과: 공식 Gen-TS write 후 check mode 일치, 직접 작성·수정한 파일의 Prettier·ESLint 검사, `pnpm typecheck`, `pnpm build` 통과. 전체 `pnpm lint`는 기존 스켈레톤 41개 파일의 Prettier 차이로 실패했으므로 통과 결과에 포함하지 않았습니다.
+
+#### 실제 브라우저 E2E
+
+`tests/dataroom-review.spec.ts`와 `tests/e2e-fixture.sql`을 직접 작성했습니다. request mocking이나 route interception 없이 실제 웹·API·PostgreSQL을 사용합니다.
+
+```sh
+docker compose -p dataroom-e2e-it --profile test run --rm --no-deps playwright
+```
+
+결과: Desktop Chrome 3개와 Pixel 7 3개, 총 6개 통과. 회사 자료 등록·검색·정렬·상세와 Review 읽기 전용 화면, 투자자 검토 작성·수정·근거·현황, peer 격리, 직접 URL·새로고침·뒤로 가기, 입력 오류 보존, 두 브라우저 context의 409 충돌, 주요 Enter 조작, console 오류와 가로 overflow를 확인합니다.
+
+자동화하지 않은 범위는 임의의 네트워크 단절·서버 500 주입, 완전히 빈 workspace의 브라우저 E2E, 모든 요소의 전체 Tab 순서와 스크린 리더 감사입니다. 로딩·조회 오류·빈 결과·저장 실패·입력 보존 UI 자체는 구현돼 있으며, 이 세 항목은 기능 미구현이 아니라 추가 자동화 범위입니다. DB 프로세스 자체를 재시작하는 E2E는 수행하지 않았지만 모든 업무 데이터는 PostgreSQL에만 저장하며 브라우저 새로고침과 API 재진입 후 조회를 검증했습니다.
+
+### AI 활용 사례
+
+이 구현에서는 OpenAI Codex를 코드 분석, 구현, 검증 보조에 사용했습니다. 아래는 이 작업 기록에서 확인 가능한 사례만 정리한 것입니다.
+
+#### 1. DB 모델과 제약 설계
+
+- **제공한 맥락:** `documents`, `reviews`, `review_evidence` 요구사항과 “다른 workspace 자료를 근거로 연결하지 못하도록 복합 외래키를 설계”하라는 요청을 제공했습니다.
+- **AI 제안 또는 변경:** workspace를 포함한 UNIQUE와 복합 FK, 상태·길이 CHECK, 정렬·검색 인덱스가 포함된 `0003_dataroom.sql`을 작성했습니다.
+- **채택·수정 판단:** 인증 문맥이 필요한 investor 역할, `ready` 및 최소 한 개 근거는 DB CHECK만으로 표현하지 않고 API 검증으로 분리했습니다. 이미 적용된 마이그레이션은 수정하지 않는 원칙에 따라 revision은 `0004`로 분리했습니다.
+- **검증 근거:** 실제 PostgreSQL 마이그레이션 적용, catalog 제약 확인, 샘플 4건 확인과 백엔드 통합 테스트를 사용했습니다.
+
+#### 2. 동시 저장과 조회 일관성
+
+- **제공한 맥락:** “동일 투자자의 최초 동시 생성과 기존 검토의 동시 수정”, “검토 내용과 근거가 서로 다른 요청 사이에서 섞이지 않게” 해 달라는 요청을 제공했습니다.
+- **AI 제안 또는 변경:** advisory transaction lock, revision 비교·증가, 검토와 근거 교체 트랜잭션을 구현하고 `listReviews`를 단일 집계 SQL로 변경했습니다.
+- **채택·수정 판단:** revision만으로 보호되지 않는 최초 INSERT까지 동일한 잠금 규칙으로 처리하는 방식을 채택했습니다. 조회에는 장시간 REPEATABLE READ transaction보다 단일 statement snapshot을 선택했습니다.
+- **검증 근거:** 실제 PostgreSQL에서 최초 동시 생성, 동시 수정, stale revision 409, rollback, 근거 불혼합을 통합 테스트로 검증했습니다.
+
+#### 3. UI와 실제 브라우저 검증
+
+- **제공한 맥락:** Plugin SDK·생성 DTO·`host.call`/`host.navigate`를 유지하면서 등록·검토·409·URL·모바일·키보드 흐름을 구현하고, 실제 API·DB E2E를 작성하도록 요청했습니다.
+- **AI 제안 또는 변경:** DataRoom 호스트 UI와 Review Plugin UI를 분리하고 React Query 상태 처리, conflict UI, 전용 E2E fixture와 두 browser context 테스트를 작성했습니다.
+- **채택·수정 판단:** 기존 UI Kit, loader, SDK, manifest는 변경하지 않았고 E2E selector는 실제 접근 가능한 label·role 중심으로 조정했습니다. 기본 DB 대신 별도 Compose 프로젝트와 workspace를 사용했습니다.
+- **검증 근거:** typecheck·lint·production build와 Desktop Chrome/Pixel 7 Playwright 6개 통과 결과를 확인했습니다.
+
+### 작업 시간
+
+- 전체 작업 시간: **약 30시간** (GitHub Fork 이후 기준). 스켈레톤 구조와 기존 코드 이해, 기능 설계·구현, Codex·ChatGPT를 활용한 코드 작성·검토, 개발환경 구성과 테스트·최종 검증 시간을 모두 포함한 대략적인 추정치입니다.
+- Docker·환경 설정 및 테스트 대응 시간: **약 16시간**으로 위 30시간에 포함됩니다. Docker 실행 및 개발환경 설정 약 1시간, 테스트·오류 분석·수정 및 최종 검증 약 15시간입니다. 나머지 약 14시간은 스켈레톤과 기존 코드 이해, 기능 설계·구현, AI 도구를 활용한 코드 작성과 검토에 사용했습니다.

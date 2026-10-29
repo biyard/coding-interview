@@ -39,8 +39,20 @@ impl ApiError {
         )
     }
 
+    pub fn forbidden_action() -> Self {
+        Self(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "You do not have permission to perform this action.",
+        )
+    }
+
     pub fn not_found() -> Self {
         Self(StatusCode::NOT_FOUND, "not_found", "Resource not found.")
+    }
+
+    pub fn conflict(message: &'static str) -> Self {
+        Self(StatusCode::CONFLICT, "conflict", message)
     }
 
     pub fn storage(error: impl std::fmt::Display) -> Self {
