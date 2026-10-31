@@ -1,0 +1,2 @@
+# Containers run these files on Linux, and prettier expects LF, so keep LF even on Windows checkouts.
+* text=auto eol=lf

@@ -64,6 +64,8 @@ export function RuntimePlugin({
           ),
         );
         if (controller.signal.aborted || !container.current) return;
+        const documentHref = (documentId: string) =>
+          `/workspace/${encodeURIComponent(current.current.workspaceId)}/documents/${encodeURIComponent(documentId)}`;
         const host: PluginHost = {
           get context() {
             return current.current;
@@ -76,6 +78,10 @@ export function RuntimePlugin({
           }),
           navigate(path) {
             navigation.current(pluginPath(base, path));
+          },
+          documentHref,
+          openDocument(documentId) {
+            navigation.current(documentHref(documentId));
           },
         };
         mounted = loaded.plugin;

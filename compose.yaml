@@ -45,6 +45,9 @@ services:
       DATABASE_URL: postgres://dataroom_interview:dataroom_interview@db:5432/dataroom_interview
       SESSION_SIGNING_KEY: dataroom-interview-local-session-signing-key-change-this-before-deployment
       CARGO_TARGET_DIR: /target
+      # Optional AI review drafts; without a key the feature reports itself as unavailable.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      REVIEW_DRAFT_MODEL: ${REVIEW_DRAFT_MODEL:-claude-opus-5-5}
     volumes:
       - ./api:/app/api:ro
       - ./plugins:/app/plugins:ro

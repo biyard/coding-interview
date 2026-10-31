@@ -39,6 +39,14 @@ impl ApiError {
         )
     }
 
+    pub fn role_forbidden() -> Self {
+        Self(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Your role cannot perform this action.",
+        )
+    }
+
     pub fn not_found() -> Self {
         Self(StatusCode::NOT_FOUND, "not_found", "Resource not found.")
     }

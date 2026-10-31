@@ -14,6 +14,28 @@ export interface PluginHost {
     options?: { target?: "dataroom"; signal?: AbortSignal },
   ): Promise<T>;
   navigate(path: string): void;
+  /** Host URL of a data room document, so plugins can link to it without knowing host routes. */
+  documentHref(documentId: string): string;
+  openDocument(documentId: string): void;
+}
+/** Method → params/result map generated from Rust (e.g. `DataroomRpcContract`). */
+export type RpcContract = { [method: string]: { params: unknown; result: unknown } };
+export type RpcClient<C extends RpcContract> = <M extends keyof C & string>(
+  method: M,
+  params: C[M]["params"],
+  options?: { signal?: AbortSignal },
+) => Promise<C[M]["result"]>;
+export function createRpcClient<C extends RpcContract>(
+  host: PluginHost,
+  target?: "dataroom",
+): RpcClient<C> {
+  return function call<M extends keyof C & string>(
+    method: M,
+    params: C[M]["params"],
+    options?: { signal?: AbortSignal },
+  ) {
+    return host.call<C[M]["result"]>(method, params, { ...options, target });
+  };
 }
 export interface Plugin {
   mount(element: HTMLElement, host: PluginHost): void;

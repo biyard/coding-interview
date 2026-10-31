@@ -7,3 +7,6 @@ playwright-report/
 *.log
 .DS_Store
 plugin-dist/
+
+# Local secrets (e.g. ANTHROPIC_API_KEY for AI review drafts)
+.env

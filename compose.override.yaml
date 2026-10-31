@@ -1,0 +1,13 @@
+# compose.yaml mounts ui-kit read-only, but pnpm must link ui-kit's dependencies into
+# ui-kit/node_modules. Give that directory a writable volume; ui-kit/node_modules/.gitkeep keeps
+# the mount point present in a fresh clone.
+services:
+  web:
+    volumes:
+      - web-ui-kit-modules:/app/ui-kit/node_modules
+  playwright:
+    volumes:
+      - playwright-ui-kit-modules:/app/ui-kit/node_modules
+volumes:
+  web-ui-kit-modules:
+  playwright-ui-kit-modules:

@@ -148,6 +148,36 @@ pub struct RpcResponse {
     pub result: serde_json::Value,
 }
 
+impl RpcResponse {
+    pub fn new(result: impl Serialize) -> Result<Self, crate::error::ApiError> {
+        Ok(Self {
+            result: serde_json::to_value(result).map_err(crate::error::ApiError::storage)?,
+        })
+    }
+}
+
+/// Reads RPC params into a typed struct; a missing (`null`) value counts as an empty object.
+pub fn parse_params<T: serde::de::DeserializeOwned>(
+    params: serde_json::Value,
+) -> Result<T, crate::error::ApiError> {
+    let params = if params.is_null() {
+        serde_json::Value::Object(Default::default())
+    } else {
+        params
+    };
+    serde_json::from_value(params)
+        .map_err(|_| crate::error::ApiError::invalid("Request parameters are invalid."))
+}
+
+/// Params and result of one RPC method, exported only to type RPC contracts on the TS side.
+#[cfg(feature = "ts-bridge")]
+#[derive(ts_rs::TS)]
+#[ts(export, export_to = "types/")]
+pub struct RpcSignature<P, R> {
+    pub params: P,
+    pub result: R,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts-bridge",
